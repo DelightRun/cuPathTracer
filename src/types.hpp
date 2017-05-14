@@ -1,29 +1,89 @@
 #ifndef TYPES_HPP
 #define TYPES_HPP
 
+#include <helper_cuda.h>
 #include <helper_math.h>
+
+#include <thrust/device_vector.h>
+#include <thrust/host_vector.h>
+
+#include <curand_kernel.h>
+
+#include <fstream>
+
+#include "constants.hpp"
+#include "utils.hpp"
 
 namespace crt {
 
+enum class ReflectionType { DIFFUSE, SPECULAR, TRANSMISSION };
+
+struct Ray {
+  float3 origin;
+  float3 direction;
+  float3 color;
+
+  __host__ __device__ Ray()
+      : origin(make_float3(0)),
+        direction(make_float3(0)),
+        color(make_float3(1)) {}
+  __host__ __device__ Ray(float3 origin, float3 direction)
+      : Ray(origin, direction, make_float3(1)) {}
+  __host__ __device__ Ray(float3 origin, float3 direction, float3 color)
+      : origin(origin), direction(normalize(direction)), color(color) {}
+};
+
 struct Material {
   float3 diffuse_color;
-  float3 emitted_color;
   float3 specular_color;
+  float3 emitted_color;
 
-  // TODO tranmission and refraction
+  float dissolve;
+  float ior;  // index of refraction
 
-  Material(float3 diffuse_color, float3 emitted_color, float3 specular_color)
-      : diffuse_color(diffuse_color),
-        emitted_color(emitted_color),
-        specular_color(specular_color) {}
+  Material()
+      : diffuse_color(make_float3(0)),
+        specular_color(make_float3(0)),
+        emitted_color(make_float3(0)),
+        dissolve(1),
+        ior(1) {}
+
+  __host__ __device__ inline bool Emit() const {
+    return !iszero(emitted_color.x) || !iszero(emitted_color.y) ||
+           !iszero(emitted_color.z);
+  }
 };
 
 struct Triangle {
-  float3 position;
   float3 vertices[3];
   float3 normal;
 
   Material material;
+
+  /** \brief Intersect with a given ray using Moller-Trumbore Algorithm
+   *  \return distance between ray's origin and intersection point, negative for
+   * disjoint
+   */
+  __host__ __device__ inline float Hit(const Ray ray) const {
+    float3 edge1 = vertices[1] - vertices[0];
+    float3 edge2 = vertices[2] - vertices[0];
+
+    float3 pvec = cross(ray.direction, edge2);
+
+    float det = dot(pvec, edge1);
+    if (iszero(det)) return -1;
+    float inv_det = 1.0f / det;
+
+    float3 tvec = ray.origin - vertices[0];
+    float p = dot(tvec, pvec) * inv_det;
+
+    float3 qvec = cross(tvec, edge1);
+    float q = dot(ray.direction, qvec) * inv_det;
+
+    float t = dot(edge2, qvec) * inv_det;
+
+    return (p >= 0.0f && q >= 0.0f && (p + q) <= 1.0f) ? t : -1;
+  }
 };
 
 struct Camera {
@@ -55,13 +115,46 @@ struct Camera {
         focal_distance(focal_distance) {}
 };
 
-struct Scene {};
+struct Scene {
+  thrust::host_vector<Triangle> triangles;
+
+  Scene() {}
+  Scene(const char* filename) {}
+};
 
 struct Image {
   uint2 resolution;
+  thrust::host_vector<uchar3> pixels;
 
-  Image(uint2 resolution) : resolution(resolution) {}
-};
+  Image(const uint2 resolution, thrust::device_vector<float3> colors,
+        Color2Pixel color2pixel)
+      : resolution(resolution) {
+    assert(resolution.x * resolution.y == colors.size());
+    pixels.resize(colors.size());
+    for (size_t i = 0; i < colors.size(); i++) {
+      pixels[i] = color2pixel(colors[i]);
+    }
+  }
+
+  // TODO Image(const Image&& image) {}
+
+  bool Save(const char* filename) const {
+    if (pixels.size() == 0) return false;
+    assert(resolution.x * resolution.y == pixels.size());
+
+    std::ofstream fout(filename);
+    if (!fout) return false;
+    fout << "P3\n";
+    fout << resolution.x << ' ' << resolution.y << "\n";
+    fout << 255 << '\n';
+    for (size_t i = 0; i < pixels.size(); i++) {
+      fout << (unsigned)pixels[i].x << ' ' << (unsigned)pixels[i].y << ' '
+           << (unsigned)pixels[i].z << ' ';
+    }
+    fout.close();
+    return true;
+  }
+};  // namespace crt
 
 }  // namespace crt
 

@@ -1,12 +1,16 @@
 cmake_minimum_required(VERSION 2.8)
+project(cuPathTracer)
 
 find_package(CUDA QUIET REQUIRED)
 
-set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -O3 -gencode arch=compute_35,code=sm_35")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -std=c++11 -gencode arch=compute_35,code=sm_35")
 
-include_directories(include)
+set(INCLUDE_DIR ${cuPathTracer_SOURCE_DIR}/include)
+set(SOURCE_DIR ${cuPathTracer_SOURCE_DIR}/src)
 
-set(COMMON_FILES types.hpp)
-set(RAY_TRACER_FILES ray_tracer.hpp ray_tracer.cu)
+include_directories(${cuPathTracer_SOURCE_DIR}/include)
 
-cuda_add_executable(RayTracerDemo main.cpp ${COMMON_FILES} ${RAY_TRACER_FILES})
+set(RAY_TRACER_FILES ${SOURCE_DIR}/path_tracer.cu)
+
+cuda_add_executable(RayTracerDemo ${SOURCE_DIR}/main.cpp ${COMMON_FILES} ${RAY_TRACER_FILES})
