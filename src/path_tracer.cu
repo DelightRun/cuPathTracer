@@ -124,14 +124,13 @@ __global__ void RayCastFromCameraKernel(const Camera camera, Ray* rays,
   unsigned x = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned y = blockIdx.y * blockDim.y + threadIdx.y;
   if (x >= camera.resolution.x || y >= camera.resolution.y) return;
-  size_t num_pixels = camera.resolution.x * camera.resolution.y;
-  size_t idx = num_pixels - 1 - (y * camera.resolution.x + x);
+  size_t idx = (camera.resolution.x - y - 1) * camera.resolution.x + x;
 
   curandState* const curand_state = &states[idx];
 
   // compute axis direction
-  float3 x_axis = normalize(cross(camera.view, camera.up));
-  float3 y_axis = normalize(cross(x_axis, camera.view));
+  float3 x_axis = normalize(cross(camera.up, camera.view));
+  float3 y_axis = normalize(cross(camera.view, x_axis));
 
   // compute size and center position of image plane
   // according to focal distance and fov
@@ -155,7 +154,6 @@ __global__ void RayCastFromCameraKernel(const Camera camera, Ray* rays,
 
   // compute origin of the ray
   float3 origin = camera.position;
-  /*
   if (camera.aperture_radius > kEpsilon) {
     // generate a random point on the aperture
     float angle = kTwoPi * curand_uniform(curand_state);
@@ -166,8 +164,8 @@ __global__ void RayCastFromCameraKernel(const Camera camera, Ray* rays,
 
     origin += x_axis * coord.x + y_axis * coord.y;
   }
-  */
 
+  // printf("\t%f, %f\n", (point).x, (point).y);
   rays[idx].origin = origin;
   rays[idx].direction = normalize(point - origin);
 }
@@ -279,22 +277,6 @@ Image PathTracer::Render(const Camera& camera) {
     /* Create rays from camera */
     RayCastFromCameraKernel<<<grid_dim, block_dim>>>(camera, rays_ptr,
                                                      curand_states_ptr);
-
-    /*
-    thrust::host_vector<Ray> host_rays(rays);
-    for (size_t i = 0; i < host_rays.size(); i++) {
-      const Ray& ray = host_rays[i];
-      std::cout << ray.origin;
-      std::cout << "\t";
-      std::cout << ray.direction;
-      std::cout << "\t";
-      std::cout << ray.color;
-      std::cout << std::endl;
-      if ((i + 1) % camera.resolution.x == 0) {
-        std::cout << std::endl;
-      }
-    }
-    */
 
     std::cout << "\t" << std::flush;
     for (size_t depth = 0; depth < m_parameter.max_trace_depth; depth++) {
