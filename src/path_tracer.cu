@@ -293,8 +293,7 @@ Image PathTracer::Render(const Camera& camera) {
   }
 
   return Image(camera.resolution, thrust::host_vector<float3>(colors),
-               Color2Pixel(1));
-  //              Color2Pixel(m_parameter.mc_sample_times));
+               Color2Pixel(m_parameter.mc_sample_times));
 }
 
 }  // namespace crt
