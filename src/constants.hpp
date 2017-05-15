@@ -5,10 +5,10 @@
 
 namespace crt {
 
-constexpr float kEpsilon = 1e-5;
+constexpr float kEpsilon = 1e-7;
 constexpr float kPi = 3.1415926535897932384626422832795028841971;
 constexpr float kTwoPi = 2 * kPi;
-constexpr float kArcPerAngle = kPi / 180;
+constexpr float kArcPerAngle = kPi / 180.0f;
 constexpr float kSQRTOfOneThird = 0.5773502691896257645091487805019574556476;
 
 constexpr float kAirIoR = 1.0f;

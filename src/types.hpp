@@ -16,7 +16,7 @@
 
 namespace crt {
 
-enum class ReflectionType { DIFFUSE, SPECULAR, TRANSMISSION };
+enum ReflectionType { DIFFUSE, SPECULAR, TRANSMISSION };
 
 struct Ray {
   float3 origin;
@@ -126,7 +126,7 @@ struct Image {
   uint2 resolution;
   thrust::host_vector<uchar3> pixels;
 
-  Image(const uint2 resolution, thrust::device_vector<float3> colors,
+  Image(const uint2 resolution, thrust::host_vector<float3> colors,
         Color2Pixel color2pixel)
       : resolution(resolution) {
     assert(resolution.x * resolution.y == colors.size());

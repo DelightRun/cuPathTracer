@@ -64,15 +64,15 @@ __device__ inline float3 ComputeTransmissionDirection(const float3 normal,
 }
 
 __device__ float3 ComputeRandomCosineWeightedDirection(
-    const float3 normal, curandState* const curand_state) {
+    const float3 normal, curandState* curand_state) {
   /* Compute a random cosine weighted direction in heimsphere */
-  float random;
-  random = curand_uniform(curand_state);
-  float theta = kTwoPi * random;
+  float random1;
+  random1 = curand_uniform(curand_state);
+  float theta = kTwoPi * random1;
 
-  random = curand_uniform(curand_state);
-  float cos_phi = sqrt(random);
-  float sin_phi = sqrt(1 - random);
+  float random2 = curand_uniform(curand_state);
+  float cos_phi = sqrt(random2);
+  float sin_phi = sqrt(1 - random2);
 
   /* Choose a axis not near to normal */
   float3 not_normal;
@@ -102,9 +102,9 @@ __device__ ReflectionType RussianRoulette(const Material& material,
   float3 random =
       threshold[2] * make_float3(curand_uniform(state), curand_uniform(state),
                                  curand_uniform(state));
-  if (random < threshold[0]) {
+  if (random <= threshold[0]) {
     return ReflectionType::DIFFUSE;
-  } else if (random < threshold[1]) {
+  } else if (random <= threshold[1]) {
     return ReflectionType::SPECULAR;
   } else {
     return ReflectionType::TRANSMISSION;
@@ -120,11 +120,12 @@ __global__ void InitializationKernal(curandState* states, size_t num_pixels,
 }
 
 __global__ void RayCastFromCameraKernel(const Camera camera, Ray* rays,
+                                        size_t num_pixels,
                                         curandState* states) {
-  unsigned x = blockIdx.x * blockDim.x + threadIdx.x;
-  unsigned y = blockIdx.y * blockDim.y + threadIdx.y;
-  if (x >= camera.resolution.x || y >= camera.resolution.y) return;
-  size_t idx = (camera.resolution.x - y - 1) * camera.resolution.x + x;
+  size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= num_pixels) return;
+  size_t x = idx % camera.resolution.x;
+  size_t y = camera.resolution.y - idx / camera.resolution.x - 1;
 
   curandState* const curand_state = &states[idx];
 
@@ -168,6 +169,7 @@ __global__ void RayCastFromCameraKernel(const Camera camera, Ray* rays,
   // printf("\t%f, %f\n", (point).x, (point).y);
   rays[idx].origin = origin;
   rays[idx].direction = normalize(point - origin);
+  rays[idx].color = make_float3(1);
 }
 
 // __global__ void RayTraceKernel(Scene scene, Ray* rays, int num_pixels);
@@ -179,9 +181,11 @@ __global__ void PathTraceKernel(const Triangle* triangles,
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= num_pixels) return;
 
-  size_t index = indices[idx];
-  Ray ray = rays[index];
-  curandState* const curand_state = &curand_states[index];
+  size_t& index = indices[idx];
+  if (index == kMaximumSize) return;
+
+  Ray& ray = rays[index];
+  curandState* curand_state = &curand_states[index];
 
   /** Get the nearest intersection */
   size_t intersection_idx = kInvalidIndex;
@@ -193,14 +197,12 @@ __global__ void PathTraceKernel(const Triangle* triangles,
       distance = t;
       intersection_idx = i;
     }
-    // printf("%d: %f\n", index, t);
   }
 
   /* TODO Air Absorption & Scattering */
 
   /** If no intersection, mark as dead ray */
   if (intersection_idx == kInvalidIndex) {
-    // color += (ray.color * kBackgroundColor);
     index = kInvalidIndex;
   } else {
     /** Get secondary ray */
@@ -228,18 +230,16 @@ __global__ void PathTraceKernel(const Triangle* triangles,
         ray.color *= triangle.material.diffuse_color;
         ray.direction =
             ComputeRandomCosineWeightedDirection(triangle.normal, curand_state);
+        // printf("%d: %f, %f, %f\n", index, ray.direction.x, ray.direction.y,
+        //       ray.direction.z);
       }
     }
 
     /** Remove the ray if its weight is very small */
-    if (dot(ray.color, ray.color) <= 1e-4) {
+    if (dot(ray.color, ray.color) <= 1e-2) {
       index = kInvalidIndex;
     }
   }
-
-  /* Write back global memory */
-  rays[indices[idx]] = ray;
-  indices[idx] = index;
 }
 
 }  // namespace
@@ -249,8 +249,9 @@ Image PathTracer::Render(const Camera& camera) {
 
   thrust::device_vector<Triangle> triangles(m_scene.triangles);
   Triangle* const triangles_ptr = thrust::raw_pointer_cast(triangles.data());
+  size_t const triangles_size = triangles.size();
 
-  thrust::device_vector<float3> colors(num_pixels);
+  thrust::device_vector<float3> colors(num_pixels, make_float3(0));
   float3* const colors_ptr = thrust::raw_pointer_cast(colors.data());
 
   thrust::device_vector<Ray> rays(num_pixels);
@@ -260,52 +261,40 @@ Image PathTracer::Render(const Camera& camera) {
   curandState* const curand_states_ptr =
       thrust::raw_pointer_cast(curand_states.data());
 
-  dim3 block_dim(16, kThreadsPerBlock / 16);
-  dim3 grid_dim(divUp(camera.resolution.x, block_dim.x),
-                divUp(camera.resolution.y, block_dim.y));
-
   for (size_t counter = 0; counter < m_parameter.mc_sample_times; counter++) {
-    /* Init indices */
-    thrust::device_vector<size_t> indices(num_pixels);
-    size_t* indices_ptr = thrust::raw_pointer_cast(indices.data());
-    thrust::sequence(indices.begin(), indices.end());
-
     /* Initialize curand */
-    InitializationKernal<<<grid_dim, block_dim>>>(curand_states_ptr, num_pixels,
-                                                  counter);
+    InitializationKernal<<<divUp(num_pixels, kThreadsPerBlock),
+                           kThreadsPerBlock>>>(curand_states_ptr, num_pixels,
+                                               counter);
 
     /* Create rays from camera */
-    RayCastFromCameraKernel<<<grid_dim, block_dim>>>(camera, rays_ptr,
-                                                     curand_states_ptr);
+    RayCastFromCameraKernel<<<divUp(num_pixels, kThreadsPerBlock),
+                              kThreadsPerBlock>>>(camera, rays_ptr, num_pixels,
+                                                  curand_states_ptr);
 
-    std::cout << "\t" << std::flush;
+    /* Init indices */
+    thrust::device_vector<size_t> indices(num_pixels);
+    thrust::sequence(indices.begin(), indices.end());
+    size_t* indices_ptr = thrust::raw_pointer_cast(indices.data());
+    size_t indices_size = num_pixels;
+
     for (size_t depth = 0; depth < m_parameter.max_trace_depth; depth++) {
-      std::cout << "." << std::flush;
       // Step 1. trace rays to get secondary rays
-      dim3 block_dim(kThreadsPerBlock);
-      dim3 grid_dim(divUp(indices.size(), block_dim.x));
-      PathTraceKernel<<<grid_dim, block_dim>>>(
-          triangles_ptr, triangles.size(), indices_ptr, rays_ptr, colors_ptr,
-          indices.size(), curand_states_ptr);
+      PathTraceKernel<<<divUp(indices.size(), kThreadsPerBlock),
+                        kThreadsPerBlock>>>(triangles_ptr, triangles_size,
+                                            indices_ptr, rays_ptr, colors_ptr,
+                                            indices_size, curand_states_ptr);
 
       // Step 2. compact rays, remove dead rays
-      thrust::remove_if(indices.begin(), indices.end(),
-                        IsUnsignedMinusOne<size_t>());
+      thrust::device_vector<size_t>::iterator end = thrust::remove_if(
+          indices.begin(), indices.end(), IsUnsignedMinusOne<size_t>());
+      indices_size = end - indices.begin();
     }
-    std::cout << 100 * (counter + 1) / m_parameter.mc_sample_times << "%"
-              << std::endl;
   }
 
-  /*
-    thrust::host_vector<float3> host_colors(colors);
-    for (const auto color : host_colors) {
-      std::cout << color.x << ", " << color.y << ", " << color.z << ", "
-                << std::endl;
-    }
-    */
-
-  return Image(camera.resolution, colors,
-               Color2Pixel(m_parameter.mc_sample_times));  // TODO from pixels
+  return Image(camera.resolution, thrust::host_vector<float3>(colors),
+               Color2Pixel(1));
+  //              Color2Pixel(m_parameter.mc_sample_times));
 }
 
 }  // namespace crt

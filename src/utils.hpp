@@ -11,7 +11,7 @@ namespace crt {
 
 template <typename T>
 struct IsUnsignedMinusOne {
-  __host__ __device__ inline bool operator()(const T value) const {
+  __host__ __device__ inline bool operator()(const T& value) const {
     return value == (T)-1;
   }
 };
@@ -54,6 +54,10 @@ __host__ __device__ inline unsigned hash(const unsigned value) {
 
 __host__ __device__ inline bool operator<(const float3 a, const float3 b) {
   return (a.x < b.x && a.y < b.y && a.z < b.z);
+}
+
+__host__ __device__ inline bool operator<=(const float3 a, const float3 b) {
+  return (a.x <= b.x && a.y <= b.y && a.z <= b.z);
 }
 
 }  // namespace crt
