@@ -52,13 +52,14 @@ struct Material {
 
 struct Triangle {
   float3 vertices[3];
-  float3 normal;
+  float3 normals[3];
 
   Material material;
 
-  Triangle() : normal(make_float3(0)) {
+  Triangle() {
     for (size_t i = 0; i < 3; i++) {
       vertices[i] = make_float3(0);
+      normals[i] = make_float3(0);
     }
   }
 
@@ -66,14 +67,14 @@ struct Triangle {
    *  \return distance between ray's origin and intersection point, negative
    * for disjoint
    */
-  __host__ __device__ inline float Hit(const Ray ray) const {
+  __host__ __device__ inline float3 Hit(const Ray ray) const {
     float3 edge1 = vertices[1] - vertices[0];
     float3 edge2 = vertices[2] - vertices[0];
 
     float3 pvec = cross(ray.direction, edge2);
 
     float det = dot(pvec, edge1);
-    if (iszerof(det)) return -1;
+    if (iszerof(det)) return make_float3(-1);
     float inv_det = 1.0f / det;
 
     float3 tvec = ray.origin - vertices[0];
@@ -84,7 +85,16 @@ struct Triangle {
 
     float t = dot(edge2, qvec) * inv_det;
 
-    return (p >= 0.0f && q >= 0.0f && (p + q) <= 1.0f) ? t : -1;
+    if (p >= 0.0f && q >= 0.0f && (p + q) <= 1.0f)
+      return make_float3(p, q, t);
+    else
+      return make_float3(-1);
+  }
+
+  __host__ __device__ inline float3 GetNormal(const float u,
+                                              const float v) const {
+    float3 normal = (1 - u - v) * normals[0] + u * normals[1] + v * normals[2];
+    return normalize(normal);
   }
 };
 

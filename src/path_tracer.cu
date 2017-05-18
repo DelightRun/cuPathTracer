@@ -46,21 +46,16 @@ __device__ inline float3 ComputeTransmissionDirection(const float3 normal,
   }
 
   float radicand = 1 - (eta * eta) * (1 - (cos_theta_i * cos_theta_i));
-  if (radicand < 0)  // return make_float3(0.0f);  // No Refrection!!!
-    return ComputeReflectionDirection(normal, incident);
+  if (radicand < 0) return make_float3(0.0f);  // No Refrection!!!
   float cos_theta_o = sqrt(radicand);
 
-  if (cos_theta_i >= 0) {
-    return normalize((eta * -cos_theta_i + cos_theta_o) * normal +
-                     eta * incident);
-  } else {
-    return normalize((eta * -cos_theta_i - cos_theta_o) * normal +
-                     eta * incident);
-  }
+  return normalize((eta * -cos_theta_i + sign(cos_theta_i) * cos_theta_o) *
+                       normal +
+                   eta * incident);
 }
 
 __device__ float3 ComputeRandomCosineWeightedDirection(
-    const float3 normal, curandState* curand_state) {
+    const float3 normal, const float3 incident, curandState* curand_state) {
   /* Compute a random cosine weighted direction in heimsphere */
   float random1;
   random1 = curand_uniform(curand_state);
@@ -83,15 +78,19 @@ __device__ float3 ComputeRandomCosineWeightedDirection(
   float3 x_axis = cross(normal, not_normal);
   float3 y_axis = cross(normal, x_axis);
 
-  return normalize((cos(theta) * sin_phi * x_axis) +
+  return -sign(dot(normal, incident)) *
+         normalize((cos(theta) * sin_phi * x_axis) +
                    (sin(theta) * sin_phi * y_axis) + (cos_phi * normal));
 }
 
-__device__ ReflectionType RussianRoulette(const Material& material,
+__device__ ReflectionType RussianRoulette(const float3 normal,
+                                          const float3 incident,
+                                          const Material& material,
                                           curandState* state) {
   float3 threshold[3];
   threshold[0] = material.diffuse_color;
-  threshold[1] = threshold[0] + material.specular_color;
+  threshold[1] = threshold[0] +
+                 material.specular_color * (dot(normal, incident) < 0 ? 1 : 0);
   threshold[2] = threshold[1] + (1 - material.dissolve);
 
   float3 random =
@@ -162,7 +161,6 @@ __global__ void RayCastFromCameraKernel(const Camera camera, Ray* rays,
     origin += x_axis * coord.x + y_axis * coord.y;
   }
 
-  // printf("\t%f, %f\n", (point).x, (point).y);
   rays[idx].origin = origin;
   rays[idx].direction = normalize(point - origin);
   rays[idx].color = make_float3(light);
@@ -185,12 +183,12 @@ __global__ void PathTraceKernel(const Triangle* triangles,
 
   /** Get the nearest intersection */
   size_t intersection_idx = kInvalidIndex;
-  float distance = 1e10f;
+  float3 weight = make_float3(1e10f); /* p, q, t */
 
   for (size_t i = 0; i < num_triangles; i++) {
-    float t = triangles[i].Hit(ray);
-    if (t > 0 && t < distance) {
-      distance = t;
+    float3 w = triangles[i].Hit(ray);
+    if (w.z > 0 && w.z < weight.z) {
+      weight = w;
       intersection_idx = i;
     }
   }
@@ -201,31 +199,27 @@ __global__ void PathTraceKernel(const Triangle* triangles,
   } else {
     /** Get secondary ray */
     const Triangle triangle = triangles[intersection_idx];
+    const float distance = weight.z;
 
-    if (triangle.material.Emit()) {
-      float3 intersection = ray.origin + ray.direction * distance;
+    ray.origin += distance * ray.direction;
+    const float3 normal = triangle.GetNormal(weight.x, weight.y);
+
+    ReflectionType type =
+        RussianRoulette(normal, ray.direction, triangle.material, curand_state);
+    if (type == ReflectionType::TRANSMISSION) {
+      ray.direction = ComputeTransmissionDirection(
+          normal, ray.direction, kAirIoR, triangle.material.ior);
+    } else if (type == ReflectionType::SPECULAR) {
+      ray.color *= triangle.material.specular_color;
+      ray.direction = ComputeReflectionDirection(normal, ray.direction);
+    } else if (type == ReflectionType::DIFFUSE) {
       colors[index] += (ray.color * triangle.material.emitted_color);
-      index = kInvalidIndex;
-    } else {
-      ray.origin += ray.direction * distance;
 
-      ReflectionType type = RussianRoulette(triangle.material, curand_state);
-
-      if (type == ReflectionType::TRANSMISSION) {
-        // ray.color *= triangle.material.dissolve;
-        // printf("%ld: %f\n", index, dot(triangle.normal, ray.direction));
-        ray.direction = ComputeTransmissionDirection(
-            triangle.normal, ray.direction, kAirIoR, triangle.material.ior);
-      } else if (type == ReflectionType::SPECULAR) {
-        ray.color *= triangle.material.specular_color;
-        ray.direction =
-            ComputeReflectionDirection(triangle.normal, ray.direction);
-      } else if (type == ReflectionType::DIFFUSE) {
-        ray.color *= triangle.material.diffuse_color;
-        ray.direction =
-            ComputeRandomCosineWeightedDirection(triangle.normal, curand_state);
-      }
+      ray.color *= triangle.material.diffuse_color;
+      ray.direction = ComputeRandomCosineWeightedDirection(
+          normal, ray.direction, curand_state);
     }
+    ray.origin += kRayOriginBias * ray.direction;
   }
 }
 

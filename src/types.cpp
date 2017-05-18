@@ -80,12 +80,11 @@ bool Scene::Load(const char* filename, const char* mtl_basedir) {
             make_float3(attrib.vertices[3 * idx.vertex_index + 0],
                         attrib.vertices[3 * idx.vertex_index + 1],
                         attrib.vertices[3 * idx.vertex_index + 2]);
-        triangle.normal +=
+        triangle.normals[v] =
             make_float3(attrib.normals[3 * idx.normal_index + 0],
                         attrib.normals[3 * idx.normal_index + 1],
                         attrib.normals[3 * idx.normal_index + 2]);
       }
-      triangle.normal = normalize(triangle.normal / -3);
 
       size_t m = shape.mesh.material_ids[f];
       const tinyobj::material_t& material = materials[m];
@@ -98,7 +97,6 @@ bool Scene::Load(const char* filename, const char* mtl_basedir) {
       triangle.material.specular_color = make_float3(
           material.specular[0], material.specular[1], material.specular[2]);
       triangle.material.dissolve = material.dissolve;
-      // triangle.material.dissolve = 1;
       triangle.material.ior = material.ior;
 
       triangles.push_back(triangle);
