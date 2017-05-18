@@ -116,7 +116,7 @@ __global__ void InitializationKernal(size_t* indices, curandState* states,
 }
 
 __global__ void RayCastFromCameraKernel(const Camera camera, Ray* rays,
-                                        size_t num_pixels,
+                                        size_t num_pixels, unsigned light,
                                         curandState* states) {
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= num_pixels) return;
@@ -165,7 +165,7 @@ __global__ void RayCastFromCameraKernel(const Camera camera, Ray* rays,
   // printf("\t%f, %f\n", (point).x, (point).y);
   rays[idx].origin = origin;
   rays[idx].direction = normalize(point - origin);
-  rays[idx].color = make_float3(12);
+  rays[idx].color = make_float3(light);
 }
 
 // __global__ void RayTraceKernel(Scene scene, Ray* rays, int num_pixels);
@@ -226,11 +226,6 @@ __global__ void PathTraceKernel(const Triangle* triangles,
             ComputeRandomCosineWeightedDirection(triangle.normal, curand_state);
       }
     }
-
-    /** Remove the ray if its weight is very small */
-    if (dot(ray.color, ray.color) <= 1e-6) {
-      index = kInvalidIndex;
-    }
   }
 }
 
@@ -265,8 +260,8 @@ Image PathTracer::Render(const Camera& camera) {
 
     /* Create rays from camera */
     RayCastFromCameraKernel<<<divUp(num_pixels, kThreadsPerBlock),
-                              kThreadsPerBlock>>>(camera, rays_ptr, num_pixels,
-                                                  curand_states_ptr);
+                              kThreadsPerBlock>>>(
+        camera, rays_ptr, num_pixels, m_scene.light, curand_states_ptr);
 
     for (size_t depth = 0; depth < m_parameter.max_trace_depth; depth++) {
       // Step 0. Check if over.

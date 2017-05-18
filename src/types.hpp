@@ -136,9 +136,10 @@ struct Image {
 
 struct Scene {
   thrust::host_vector<Triangle> triangles;
+  unsigned light;
 
-  Scene() {}
-  Scene(const char* filename, const char* mtl_basedir = NULL) {
+  Scene() : light(10) {}
+  Scene(const char* filename, const char* mtl_basedir = NULL) : light(10) {
     if (!Load(filename, mtl_basedir)) {
       throw "Cannot load scene from file!";
     }
