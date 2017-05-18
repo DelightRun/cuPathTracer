@@ -20,11 +20,6 @@
 
 namespace crt {
 
-std::ostream& operator<<(std::ostream& os, float3 value) {
-  os << "( " << value.x << ", " << value.y << ", " << value.z << " )";
-  return os;
-}
-
 namespace {
 
 __device__ inline float3 ComputeReflectionDirection(const float3 normal,
@@ -51,7 +46,8 @@ __device__ inline float3 ComputeTransmissionDirection(const float3 normal,
   }
 
   float radicand = 1 - (eta * eta) * (1 - (cos_theta_i * cos_theta_i));
-  if (radicand < 0) return make_float3(0.0f);  // No Refrection!!!
+  if (radicand < 0)  // return make_float3(0.0f);  // No Refrection!!!
+    return ComputeReflectionDirection(normal, incident);
   float cos_theta_o = sqrt(radicand);
 
   if (cos_theta_i >= 0) {
@@ -93,7 +89,6 @@ __device__ float3 ComputeRandomCosineWeightedDirection(
 
 __device__ ReflectionType RussianRoulette(const Material& material,
                                           curandState* state) {
-  // TODO Always Diffuse
   float3 threshold[3];
   threshold[0] = material.diffuse_color;
   threshold[1] = threshold[0] + material.specular_color;
@@ -111,11 +106,12 @@ __device__ ReflectionType RussianRoulette(const Material& material,
   }
 }
 
-__global__ void InitializationKernal(curandState* states, size_t num_pixels,
-                                     size_t seed) {
+__global__ void InitializationKernal(size_t* indices, curandState* states,
+                                     size_t num_pixels, size_t seed) {
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= num_pixels) return;
 
+  indices[idx] = idx;
   curand_init(hash(idx) * hash(seed), 0, 0, &states[idx]);
 }
 
@@ -130,8 +126,8 @@ __global__ void RayCastFromCameraKernel(const Camera camera, Ray* rays,
   curandState* const curand_state = &states[idx];
 
   // compute axis direction
-  float3 x_axis = normalize(cross(camera.up, camera.view));
-  float3 y_axis = normalize(cross(camera.view, x_axis));
+  float3 x_axis = normalize(cross(camera.view, camera.up));
+  float3 y_axis = normalize(cross(x_axis, camera.view));
 
   // compute size and center position of image plane
   // according to focal distance and fov
@@ -169,7 +165,7 @@ __global__ void RayCastFromCameraKernel(const Camera camera, Ray* rays,
   // printf("\t%f, %f\n", (point).x, (point).y);
   rays[idx].origin = origin;
   rays[idx].direction = normalize(point - origin);
-  rays[idx].color = make_float3(1);
+  rays[idx].color = make_float3(12);
 }
 
 // __global__ void RayTraceKernel(Scene scene, Ray* rays, int num_pixels);
@@ -199,8 +195,6 @@ __global__ void PathTraceKernel(const Triangle* triangles,
     }
   }
 
-  /* TODO Air Absorption & Scattering */
-
   /** If no intersection, mark as dead ray */
   if (intersection_idx == kInvalidIndex) {
     index = kInvalidIndex;
@@ -214,12 +208,12 @@ __global__ void PathTraceKernel(const Triangle* triangles,
       index = kInvalidIndex;
     } else {
       ray.origin += ray.direction * distance;
-      ray.origin += triangle.normal * 0.01f;
 
       ReflectionType type = RussianRoulette(triangle.material, curand_state);
 
-      if (type == ReflectionType::TRANSMISSION) { /* refraction */
-        ray.color *= triangle.material.dissolve;
+      if (type == ReflectionType::TRANSMISSION) {
+        // ray.color *= triangle.material.dissolve;
+        // printf("%ld: %f\n", index, dot(triangle.normal, ray.direction));
         ray.direction = ComputeTransmissionDirection(
             triangle.normal, ray.direction, kAirIoR, triangle.material.ior);
       } else if (type == ReflectionType::SPECULAR) {
@@ -230,13 +224,11 @@ __global__ void PathTraceKernel(const Triangle* triangles,
         ray.color *= triangle.material.diffuse_color;
         ray.direction =
             ComputeRandomCosineWeightedDirection(triangle.normal, curand_state);
-        // printf("%d: %f, %f, %f\n", index, ray.direction.x, ray.direction.y,
-        //       ray.direction.z);
       }
     }
 
     /** Remove the ray if its weight is very small */
-    if (dot(ray.color, ray.color) <= 1e-2) {
+    if (dot(ray.color, ray.color) <= 1e-6) {
       index = kInvalidIndex;
     }
   }
@@ -249,7 +241,6 @@ Image PathTracer::Render(const Camera& camera) {
 
   thrust::device_vector<Triangle> triangles(m_scene.triangles);
   Triangle* const triangles_ptr = thrust::raw_pointer_cast(triangles.data());
-  size_t const triangles_size = triangles.size();
 
   thrust::device_vector<float3> colors(num_pixels, make_float3(0));
   float3* const colors_ptr = thrust::raw_pointer_cast(colors.data());
@@ -261,38 +252,41 @@ Image PathTracer::Render(const Camera& camera) {
   curandState* const curand_states_ptr =
       thrust::raw_pointer_cast(curand_states.data());
 
+  thrust::device_vector<size_t> indices(num_pixels);
+  size_t* indices_ptr = thrust::raw_pointer_cast(indices.data());
+
   for (size_t counter = 0; counter < m_parameter.mc_sample_times; counter++) {
-    /* Initialize curand */
+    indices.resize(num_pixels);
+
+    /* Initialization */
     InitializationKernal<<<divUp(num_pixels, kThreadsPerBlock),
-                           kThreadsPerBlock>>>(curand_states_ptr, num_pixels,
-                                               counter);
+                           kThreadsPerBlock>>>(indices_ptr, curand_states_ptr,
+                                               num_pixels, counter);
 
     /* Create rays from camera */
     RayCastFromCameraKernel<<<divUp(num_pixels, kThreadsPerBlock),
                               kThreadsPerBlock>>>(camera, rays_ptr, num_pixels,
                                                   curand_states_ptr);
 
-    /* Init indices */
-    thrust::device_vector<size_t> indices(num_pixels);
-    thrust::sequence(indices.begin(), indices.end());
-    size_t* indices_ptr = thrust::raw_pointer_cast(indices.data());
-    size_t indices_size = num_pixels;
-
     for (size_t depth = 0; depth < m_parameter.max_trace_depth; depth++) {
-      // Step 1. trace rays to get secondary rays
-      PathTraceKernel<<<divUp(indices.size(), kThreadsPerBlock),
-                        kThreadsPerBlock>>>(triangles_ptr, triangles_size,
-                                            indices_ptr, rays_ptr, colors_ptr,
-                                            indices_size, curand_states_ptr);
+      // Step 0. Check if over.
+      if (indices.size() == 0) break;
 
-      // Step 2. compact rays, remove dead rays
+      // Step 1. Trace rays to get secondary rays.
+      PathTraceKernel<<<divUp(indices.size(), kThreadsPerBlock),
+                        kThreadsPerBlock>>>(triangles_ptr, triangles.size(),
+                                            indices_ptr, rays_ptr, colors_ptr,
+                                            indices.size(), curand_states_ptr);
+
+      // Step 2. Compact rays, remove dead rays.
       thrust::device_vector<size_t>::iterator end = thrust::remove_if(
           indices.begin(), indices.end(), IsUnsignedMinusOne<size_t>());
-      indices_size = end - indices.begin();
+      indices.resize(end - indices.begin());
     }
   }
 
   return Image(camera.resolution, thrust::host_vector<float3>(colors),
+               // Color2Pixel(10));
                Color2Pixel(m_parameter.mc_sample_times));
 }
 

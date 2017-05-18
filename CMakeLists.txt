@@ -11,6 +11,6 @@ set(SOURCE_DIR ${cuPathTracer_SOURCE_DIR}/src)
 
 include_directories(${cuPathTracer_SOURCE_DIR}/include)
 
-set(RAY_TRACER_FILES ${SOURCE_DIR}/path_tracer.cu)
+set(PATH_TRACER_FILES ${SOURCE_DIR}/path_tracer.cu ${SOURCE_DIR}/types.cpp)
 
-cuda_add_executable(RayTracerDemo ${SOURCE_DIR}/main.cpp ${COMMON_FILES} ${RAY_TRACER_FILES})
+cuda_add_executable(PathTracerDemo ${SOURCE_DIR}/main.cpp ${COMMON_FILES} ${PATH_TRACER_FILES})
