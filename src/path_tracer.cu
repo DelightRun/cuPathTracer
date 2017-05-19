@@ -18,7 +18,7 @@
 #include "types.hpp"
 #include "utils.hpp"
 
-namespace crt {
+namespace cupt {
 
 namespace {
 
@@ -87,11 +87,14 @@ __device__ ReflectionType RussianRoulette(const float3 normal,
                                           const float3 incident,
                                           const Material& material,
                                           curandState* state) {
+  // TODO Fresnel
+  float reflection = 1;
+  float refraction = 1 - material.dissolve;
+
   float3 threshold[3];
   threshold[0] = material.diffuse_color;
-  threshold[1] = threshold[0] +
-                 material.specular_color * (dot(normal, incident) < 0 ? 1 : 0);
-  threshold[2] = threshold[1] + (1 - material.dissolve);
+  threshold[1] = threshold[0] + material.specular_color * reflection;
+  threshold[2] = threshold[1] + refraction;
 
   float3 random =
       threshold[2] * make_float3(curand_uniform(state), curand_uniform(state),
@@ -207,6 +210,7 @@ __global__ void PathTraceKernel(const Triangle* triangles,
     ReflectionType type =
         RussianRoulette(normal, ray.direction, triangle.material, curand_state);
     if (type == ReflectionType::TRANSMISSION) {
+      ray.color *= (1 - triangle.material.dissolve);
       ray.direction = ComputeTransmissionDirection(
           normal, ray.direction, kAirIoR, triangle.material.ior);
     } else if (type == ReflectionType::SPECULAR) {
@@ -268,8 +272,8 @@ Image PathTracer::Render(const Camera& camera) {
                                             indices.size(), curand_states_ptr);
 
       // Step 2. Compact rays, remove dead rays.
-      thrust::device_vector<size_t>::iterator end = thrust::remove_if(
-          indices.begin(), indices.end(), IsUnsignedMinusOne<size_t>());
+      thrust::device_vector<size_t>::iterator end =
+          thrust::remove_if(indices.begin(), indices.end(), IsInvalidIndex());
       indices.resize(end - indices.begin());
     }
   }
@@ -279,4 +283,4 @@ Image PathTracer::Render(const Camera& camera) {
                Color2Pixel(m_parameter.mc_sample_times));
 }
 
-}  // namespace crt
+}  // namespace cupt

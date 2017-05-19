@@ -11,7 +11,7 @@
 #include "constants.hpp"
 #include "utils.hpp"
 
-namespace crt {
+namespace cupt {
 
 enum ReflectionType { DIFFUSE, SPECULAR, TRANSMISSION };
 
@@ -158,6 +158,6 @@ struct Scene {
   bool Load(const char* filename, const char* mtl_basedir = NULL);
 };
 
-}  // namespace crt
+}  // namespace cupt
 
 #endif

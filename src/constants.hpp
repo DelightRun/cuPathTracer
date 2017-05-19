@@ -3,7 +3,7 @@
 
 #include <stdlib.h>
 
-namespace crt {
+namespace cupt {
 
 constexpr float kEpsilon = 1e-7;
 constexpr float kPi = 3.1415926535897932384626422832795028841971;
@@ -19,6 +19,6 @@ constexpr size_t kInvalidIndex = kMaximumSize;
 
 constexpr size_t kThreadsPerBlock = 256;
 
-}  // namespace crt
+}  // namespace cupt
 
 #endif

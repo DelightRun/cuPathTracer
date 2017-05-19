@@ -7,7 +7,7 @@
 
 #include "constants.hpp"
 
-namespace crt {
+namespace cupt {
 
 inline std::ostream& operator<<(std::ostream& os, float3 value) {
   os << "( " << value.x << ", " << value.y << ", " << value.z << " )";
@@ -54,10 +54,9 @@ __host__ __device__ inline bool operator<=(const float3 a, const float3 b) {
   return (a.x <= b.x && a.y <= b.y && a.z <= b.z);
 }
 
-template <typename T>
-struct IsUnsignedMinusOne {
-  __host__ __device__ inline bool operator()(const T& value) const {
-    return value == (T)-1;
+struct IsInvalidIndex {
+  __host__ __device__ inline bool operator()(const size_t value) const {
+    return value == kInvalidIndex;
   }
 };
 
@@ -73,6 +72,6 @@ struct Color2Pixel {
   }
 };
 
-}  // namespace crt
+}  // namespace cupt
 
 #endif

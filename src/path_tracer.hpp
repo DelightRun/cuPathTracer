@@ -3,7 +3,7 @@
 
 #include "types.hpp"
 
-namespace crt {
+namespace cupt {
 
 class PathTracer {
  public:
@@ -26,6 +26,6 @@ class PathTracer {
   Scene m_scene;
 };
 
-}  // namespace crt
+}  // namespace cupt
 
 #endif
