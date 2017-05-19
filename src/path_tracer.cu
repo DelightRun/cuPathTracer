@@ -29,29 +29,24 @@ __device__ inline float3 ComputeReflectionDirection(const float3 normal,
   return normalize(incident - 2.0 * dot(incident, normal) * normal);
 }
 
-__device__ inline float3 ComputeTransmissionDirection(const float3 normal,
-                                                      const float3 incident,
-                                                      float air_ior,
-                                                      float material_ior) {
+__device__ inline float3 ComputeTransmissionDirection(
+    const float3 normal, const float3 incident, const float incident_ior,
+    const float transmitted_ior) {
   /* Compute refraction direction according to Snell's Law.
    * Refer to "Rui Wang, Lec12 - Ray Tracing, page 15" */
-
   float cos_theta_i = dot(normal, incident);
 
-  float eta = 0;
-  if (cos_theta_i >= 0) { /* Material -> Air */
-    eta = material_ior / air_ior;
-  } else { /* Air -> Material */
-    eta = air_ior / material_ior;
-  }
+  float eta = incident_ior / transmitted_ior;
 
-  float radicand = 1 - (eta * eta) * (1 - (cos_theta_i * cos_theta_i));
-  if (radicand < 0) return make_float3(0.0f);  // No Refrection!!!
+  float radicand = 1 - square(eta) * (1 - square(cos_theta_i));
+  if (radicand < 0) /* Total Internal Reflection */
+    return make_float3(0);
   float cos_theta_o = sqrt(radicand);
 
-  return normalize((eta * -cos_theta_i + sign(cos_theta_i) * cos_theta_o) *
-                       normal +
-                   eta * incident);
+  float3 direction =
+      (sign(cos_theta_i) * cos_theta_o - eta * cos_theta_i) * normal +
+      eta * incident;
+  return normalize(direction);
 }
 
 __device__ float3 ComputeRandomCosineWeightedDirection(
@@ -78,34 +73,10 @@ __device__ float3 ComputeRandomCosineWeightedDirection(
   float3 x_axis = cross(normal, not_normal);
   float3 y_axis = cross(normal, x_axis);
 
-  return -sign(dot(normal, incident)) *
-         normalize((cos(theta) * sin_phi * x_axis) +
-                   (sin(theta) * sin_phi * y_axis) + (cos_phi * normal));
-}
-
-__device__ ReflectionType RussianRoulette(const float3 normal,
-                                          const float3 incident,
-                                          const Material& material,
-                                          curandState* state) {
-  // TODO Fresnel
-  float reflection = 1;
-  float refraction = 1 - material.dissolve;
-
-  float3 threshold[3];
-  threshold[0] = material.diffuse_color;
-  threshold[1] = threshold[0] + material.specular_color * reflection;
-  threshold[2] = threshold[1] + refraction;
-
-  float3 random =
-      threshold[2] * make_float3(curand_uniform(state), curand_uniform(state),
-                                 curand_uniform(state));
-  if (random <= threshold[0]) {
-    return ReflectionType::DIFFUSE;
-  } else if (random <= threshold[1]) {
-    return ReflectionType::SPECULAR;
-  } else {
-    return ReflectionType::TRANSMISSION;
-  }
+  float3 direction = ((cos(theta) * sin_phi * x_axis) +
+                      (sin(theta) * sin_phi * y_axis) + (cos_phi * normal));
+  direction *= -sign(dot(normal, incident));
+  return normalize(direction);
 }
 
 __global__ void InitializationKernal(size_t* indices, curandState* states,
@@ -127,34 +98,30 @@ __global__ void RayCastFromCameraKernel(const Camera camera, Ray* rays,
 
   curandState* const curand_state = &states[idx];
 
-  // compute axis direction
+  /* compute axis direction */
   float3 x_axis = normalize(cross(camera.view, camera.up));
   float3 y_axis = normalize(cross(x_axis, camera.view));
 
-  // compute size and center position of image plane
-  // according to focal distance and fov
+  /* compute size and center position of image plane
+   * according to focal distance and fov */
   float3 center = camera.position + camera.focal_distance * camera.view;
   float2 size =
       2 * make_float2(
               camera.focal_distance * tan((camera.fov.x / 2) * kArcPerAngle),
               camera.focal_distance * tan((camera.fov.y / 2) * kArcPerAngle));
 
-  // compute the jittered point position on image plane
-  // 1. generate random jitter offsets(in pixel) for supersample
+  /* compute the jittered point position on image plane */
   float2 jitter = make_float2(curand_uniform(curand_state) - 0.5,
                               curand_uniform(curand_state) - 0.5);
-  // 2. compute distances to the center of image plane
   float2 distances = make_float2(make_uint2(x, y)) + jitter;
   distances /= (make_float2(camera.resolution) - 1);
   distances -= 0.5;
   distances *= size;
-  // 3. compute point coordinate
   float3 point = center + x_axis * distances.x + y_axis * distances.y;
 
-  // compute origin of the ray
+  /* compute origin of the ray */
   float3 origin = camera.position;
   if (camera.aperture_radius > kEpsilon) {
-    // generate a random point on the aperture
     float angle = kTwoPi * curand_uniform(curand_state);
     float distance =
         camera.aperture_radius * sqrt(curand_uniform(curand_state));
@@ -169,7 +136,6 @@ __global__ void RayCastFromCameraKernel(const Camera camera, Ray* rays,
   rays[idx].color = make_float3(light);
 }
 
-// __global__ void RayTraceKernel(Scene scene, Ray* rays, int num_pixels);
 __global__ void PathTraceKernel(const Triangle* triangles,
                                 const size_t num_triangles, size_t* indices,
                                 Ray* rays, float3* colors,
@@ -202,26 +168,67 @@ __global__ void PathTraceKernel(const Triangle* triangles,
   } else {
     /** Get secondary ray */
     const Triangle triangle = triangles[intersection_idx];
+    const float3 normal = triangle.GetNormal(weight.x, weight.y);
     const float distance = weight.z;
 
+    // TODO Bidirection
+
+    float3 diffusion = triangle.material.diffuse_color;
+    float3 reflection = triangle.material.specular_color;
+    float3 refraction = make_float3(1 - triangle.material.dissolve);
+
+    /* Calcluate Fresnel cofficient if necessary */
+    float incident_ior = kAirIoR, transmitted_ior = kAirIoR;
+    if (triangle.material.dissolve < 1) {
+      if (dot(normal, ray.direction) < 0) /* Air -> Material */
+        transmitted_ior = triangle.material.ior;
+      else /* Material -> Air */
+        incident_ior = triangle.material.ior;
+
+      const float3 direction = ComputeTransmissionDirection(
+          normal, ray.direction, incident_ior, transmitted_ior);
+
+      if (iszero(direction)) { /* Total Internal Reflection */
+        reflection = make_float3(1);
+        refraction = make_float3(0);
+      } else { /* Fresnel */
+        float cos_theta_i = fabs(dot(normal, ray.direction));
+        float cos_theta_o = fabs(dot(normal, direction));
+        float rs = square(
+            (incident_ior * cos_theta_i - transmitted_ior * cos_theta_o) /
+            (incident_ior * cos_theta_i + transmitted_ior * cos_theta_o));
+        float rt = square(
+            (incident_ior * cos_theta_o - transmitted_ior * cos_theta_i) /
+            (incident_ior * cos_theta_o + transmitted_ior * cos_theta_i));
+        float r = (rs + rt) / 2;
+
+        reflection = make_float3(r);
+        refraction = make_float3(1 - r);
+      }
+    }
+
+    /* Russian Roulette */
+    float3 threshold[3];
+    threshold[0] = diffusion;
+    threshold[1] = threshold[0] + reflection;
+    threshold[2] = threshold[1] + refraction;
+    float3 random = threshold[2] * make_float3(curand_uniform(curand_state),
+                                               curand_uniform(curand_state),
+                                               curand_uniform(curand_state));
+
     ray.origin += distance * ray.direction;
-    const float3 normal = triangle.GetNormal(weight.x, weight.y);
-
-    ReflectionType type =
-        RussianRoulette(normal, ray.direction, triangle.material, curand_state);
-    if (type == ReflectionType::TRANSMISSION) {
-      ray.color *= (1 - triangle.material.dissolve);
-      ray.direction = ComputeTransmissionDirection(
-          normal, ray.direction, kAirIoR, triangle.material.ior);
-    } else if (type == ReflectionType::SPECULAR) {
-      ray.color *= triangle.material.specular_color;
-      ray.direction = ComputeReflectionDirection(normal, ray.direction);
-    } else if (type == ReflectionType::DIFFUSE) {
+    if (random <= threshold[0]) { /* Diffusion */
       colors[index] += (ray.color * triangle.material.emitted_color);
-
       ray.color *= triangle.material.diffuse_color;
       ray.direction = ComputeRandomCosineWeightedDirection(
           normal, ray.direction, curand_state);
+    } else if (random <= threshold[1]) { /* Reflection */
+      ray.color *= triangle.material.specular_color;
+      ray.direction = ComputeReflectionDirection(normal, ray.direction);
+    } else if (random <= threshold[2]) { /* Refraction */
+      // ray.color *= 0.9;
+      ray.direction = ComputeTransmissionDirection(
+          normal, ray.direction, incident_ior, transmitted_ior);
     }
     ray.origin += kRayOriginBias * ray.direction;
   }
@@ -249,9 +256,8 @@ Image PathTracer::Render(const Camera& camera) {
   size_t* indices_ptr = thrust::raw_pointer_cast(indices.data());
 
   for (size_t counter = 0; counter < m_parameter.mc_sample_times; counter++) {
-    indices.resize(num_pixels);
-
     /* Initialization */
+    indices.resize(num_pixels);
     InitializationKernal<<<divUp(num_pixels, kThreadsPerBlock),
                            kThreadsPerBlock>>>(indices_ptr, curand_states_ptr,
                                                num_pixels, counter);
@@ -262,16 +268,16 @@ Image PathTracer::Render(const Camera& camera) {
         camera, rays_ptr, num_pixels, m_scene.light, curand_states_ptr);
 
     for (size_t depth = 0; depth < m_parameter.max_trace_depth; depth++) {
-      // Step 0. Check if over.
+      /* Step 0. Check if over. */
       if (indices.size() == 0) break;
 
-      // Step 1. Trace rays to get secondary rays.
+      /* Step 1. Trace rays to get secondary rays. */
       PathTraceKernel<<<divUp(indices.size(), kThreadsPerBlock),
                         kThreadsPerBlock>>>(triangles_ptr, triangles.size(),
                                             indices_ptr, rays_ptr, colors_ptr,
                                             indices.size(), curand_states_ptr);
 
-      // Step 2. Compact rays, remove dead rays.
+      /* Step 2. Compact rays, remove dead rays. */
       thrust::device_vector<size_t>::iterator end =
           thrust::remove_if(indices.begin(), indices.end(), IsInvalidIndex());
       indices.resize(end - indices.begin());

@@ -26,10 +26,14 @@ __host__ __device__ inline bool iszero(const float3 value) {
   return iszerof(value.x) && iszerof(value.y) && iszerof(value.z);
 }
 
-template <typename T>
-__host__ __device__ inline int sign(const T value) {
+__host__ __device__ inline int sign(const float value) {
   return value > 0 ? 1 : value < 0 ? -1 : 0;
 }
+
+__host__ __device__ inline float square(const float value) {
+  return value * value;
+}
+
 __host__ __device__ inline float3 pow(const float3 value, const float exp) {
   return make_float3(powf(value.x, exp), powf(value.y, exp),
                      powf(value.z, exp));

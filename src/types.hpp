@@ -13,7 +13,7 @@
 
 namespace cupt {
 
-enum ReflectionType { DIFFUSE, SPECULAR, TRANSMISSION };
+enum TransmissionType { DIFFUSION, REFLECTION, REFRACTION };
 
 struct Ray {
   float3 origin;
