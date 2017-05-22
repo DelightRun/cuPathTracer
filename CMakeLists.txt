@@ -4,7 +4,7 @@ project(cuPathTracer)
 find_package(CUDA QUIET REQUIRED)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -std=c++11 -gencode arch=compute_35,code=sm_35")
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -std=c++11")
 
 set(INCLUDE_DIR ${cuPathTracer_SOURCE_DIR}/include)
 set(SOURCE_DIR ${cuPathTracer_SOURCE_DIR}/src)
