@@ -1,5 +1,4 @@
 #include <fstream>
-#include <iostream>
 #include <string>
 #include <vector>
 
@@ -71,6 +70,7 @@ bool Scene::Load(const char* filename, const char* mtl_basedir) {
           material.specular[0], material.specular[1], material.specular[2]);
       triangle.material.dissolve = material.dissolve;
       triangle.material.ior = material.ior;
+      triangle.material.shininess = material.shininess;
 
       if (triangle.material.ior > 1.0)
         triangle.material.specular_color = make_float3(1);

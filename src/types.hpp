@@ -1,8 +1,8 @@
 #ifndef TYPES_HPP
 #define TYPES_HPP
 
-#include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
+#include <thrust/host_vector.h>
 
 #include <helper_cuda.h>
 #include <helper_math.h>
@@ -36,6 +36,7 @@ struct Material {
   float3 specular_color;
   float3 emitted_color;
 
+  float shininess;  // specular exponent
   float dissolve;
   float ior;  // index of refraction
 
@@ -44,7 +45,8 @@ struct Material {
         specular_color(make_float3(0)),
         emitted_color(make_float3(0)),
         dissolve(1),
-        ior(1) {}
+        ior(kAirIoR),
+        shininess(1) {}
 
   __host__ __device__ inline bool Emit() const {
     return !iszero(emitted_color);
@@ -155,10 +157,14 @@ struct Image {
 
 struct Scene {
   thrust::host_vector<Triangle> triangles;
-  unsigned intensity;
+  float intensity;
 
   Scene() : intensity(kDefaultIntensity) {}
-  Scene(const char* filename, const char* mtl_basedir = NULL) : intensity(kDefaultIntensity) {
+  Scene(const char* filename, const char* mtl_basedir = NULL)
+      : Scene(kDefaultIntensity, filename, mtl_basedir) {}
+  Scene(const float intensity, const char* filename,
+        const char* mtl_basedir = NULL)
+      : intensity(intensity) {
     if (!Load(filename, mtl_basedir)) {
       throw "Cannot load scene from file!";
     }
