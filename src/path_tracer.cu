@@ -22,6 +22,8 @@ namespace cupt {
 
 namespace {
 
+__constant__ Camera camera;
+
 __device__ inline float3 ComputeReflectionDirection(const float3 normal,
                                                     const float3 incident) {
   /* Compute reflection direction.
@@ -79,24 +81,25 @@ __device__ float3 ComputeRandomCosineWeightedDirection(
   return normalize(direction);
 }
 
-__global__ void InitializationKernal(size_t* indices, curandState* states,
+__global__ void InitializationKernal(size_t* indices, curandState* curand_states,
                                      size_t num_pixels, size_t seed) {
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= num_pixels) return;
 
   indices[idx] = idx;
-  curand_init(hash(idx) * hash(seed), 0, 0, &states[idx]);
+  curand_init(hash(idx) * hash(seed), 0, 0, &curand_states[idx]);
 }
 
-__global__ void RayCastFromCameraKernel(const Camera camera, Ray* rays,
-                                        size_t num_pixels, unsigned light,
-                                        curandState* states) {
+__global__ void RayCastFromCameraKernel(Ray* rays,
+                                        const size_t num_pixels, const unsigned intensity,
+                                        curandState* curand_states) {
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= num_pixels) return;
+
   size_t x = idx % camera.resolution.x;
   size_t y = camera.resolution.y - idx / camera.resolution.x - 1;
 
-  curandState* const curand_state = &states[idx];
+  curandState* const curand_state = &curand_states[idx];
 
   /* compute axis direction */
   float3 x_axis = normalize(cross(camera.view, camera.up));
@@ -104,20 +107,19 @@ __global__ void RayCastFromCameraKernel(const Camera camera, Ray* rays,
 
   /* compute size and center position of image plane
    * according to focal distance and fov */
-  float3 center = camera.position + camera.focal_distance * camera.view;
-  float2 size =
-      2 * make_float2(
-              camera.focal_distance * tan((camera.fov.x / 2) * kArcPerAngle),
-              camera.focal_distance * tan((camera.fov.y / 2) * kArcPerAngle));
+  float3 center = camera.position + camera.view;
+  float2 half_size = make_float2(tan((camera.fov.x / 2) * kArcPerAngle),
+                                 tan((camera.fov.y / 2) * kArcPerAngle));
 
   /* compute the jittered point position on image plane */
   float2 jitter = make_float2(curand_uniform(curand_state) - 0.5,
                               curand_uniform(curand_state) - 0.5);
   float2 distances = make_float2(make_uint2(x, y)) + jitter;
   distances /= (make_float2(camera.resolution) - 1);
-  distances -= 0.5;
-  distances *= size;
+  distances = (2 * distances - 1) * half_size;
+
   float3 point = center + x_axis * distances.x + y_axis * distances.y;
+  point = camera.position + (point - camera.position) * camera.focal_distance;
 
   /* compute origin of the ray */
   float3 origin = camera.position;
@@ -125,15 +127,13 @@ __global__ void RayCastFromCameraKernel(const Camera camera, Ray* rays,
     float angle = kTwoPi * curand_uniform(curand_state);
     float distance =
         camera.aperture_radius * sqrt(curand_uniform(curand_state));
-
     float2 coord = make_float2(cos(angle) * distance, sin(angle) * distance);
-
     origin += x_axis * coord.x + y_axis * coord.y;
   }
 
   rays[idx].origin = origin;
   rays[idx].direction = normalize(point - origin);
-  rays[idx].color = make_float3(light);
+  rays[idx].color = make_float3(intensity);
 }
 
 __global__ void PathTraceKernel(const Triangle* triangles,
@@ -226,7 +226,7 @@ __global__ void PathTraceKernel(const Triangle* triangles,
       ray.color *= triangle.material.specular_color;
       ray.direction = ComputeReflectionDirection(normal, ray.direction);
     } else if (random <= threshold[2]) { /* Refraction */
-      // ray.color *= 0.9;
+      ray.color *= 0.9;
       ray.direction = ComputeTransmissionDirection(
           normal, ray.direction, incident_ior, transmitted_ior);
     }
@@ -236,8 +236,10 @@ __global__ void PathTraceKernel(const Triangle* triangles,
 
 }  // namespace
 
-Image PathTracer::Render(const Camera& camera) {
-  const size_t num_pixels = camera.resolution.x * camera.resolution.y;
+Image PathTracer::Render(const Camera& host_camera) {
+  checkCudaErrors( cudaMemcpyToSymbol(camera, &host_camera, sizeof(Camera)) );
+
+  const size_t num_pixels = host_camera.resolution.x * host_camera.resolution.y;
 
   thrust::device_vector<Triangle> triangles(m_scene.triangles);
   Triangle* const triangles_ptr = thrust::raw_pointer_cast(triangles.data());
@@ -248,9 +250,9 @@ Image PathTracer::Render(const Camera& camera) {
   thrust::device_vector<Ray> rays(num_pixels);
   Ray* const rays_ptr = thrust::raw_pointer_cast(rays.data());
 
-  thrust::device_vector<curandState> curand_states(num_pixels);
-  curandState* const curand_states_ptr =
-      thrust::raw_pointer_cast(curand_states.data());
+  thrust::device_vector<curandState> curand_curand_states(num_pixels);
+  curandState* const curand_curand_states_ptr =
+      thrust::raw_pointer_cast(curand_curand_states.data());
 
   thrust::device_vector<size_t> indices(num_pixels);
   size_t* indices_ptr = thrust::raw_pointer_cast(indices.data());
@@ -259,13 +261,13 @@ Image PathTracer::Render(const Camera& camera) {
     /* Initialization */
     indices.resize(num_pixels);
     InitializationKernal<<<divUp(num_pixels, kThreadsPerBlock),
-                           kThreadsPerBlock>>>(indices_ptr, curand_states_ptr,
+                           kThreadsPerBlock>>>(indices_ptr, curand_curand_states_ptr,
                                                num_pixels, counter);
 
     /* Create rays from camera */
     RayCastFromCameraKernel<<<divUp(num_pixels, kThreadsPerBlock),
                               kThreadsPerBlock>>>(
-        camera, rays_ptr, num_pixels, m_scene.light, curand_states_ptr);
+        rays_ptr, num_pixels, m_scene.intensity, curand_curand_states_ptr);
 
     for (size_t depth = 0; depth < m_parameter.max_trace_depth; depth++) {
       /* Step 0. Check if over. */
@@ -275,7 +277,7 @@ Image PathTracer::Render(const Camera& camera) {
       PathTraceKernel<<<divUp(indices.size(), kThreadsPerBlock),
                         kThreadsPerBlock>>>(triangles_ptr, triangles.size(),
                                             indices_ptr, rays_ptr, colors_ptr,
-                                            indices.size(), curand_states_ptr);
+                                            indices.size(), curand_curand_states_ptr);
 
       /* Step 2. Compact rays, remove dead rays. */
       thrust::device_vector<size_t>::iterator end =
@@ -284,8 +286,7 @@ Image PathTracer::Render(const Camera& camera) {
     }
   }
 
-  return Image(camera.resolution, thrust::host_vector<float3>(colors),
-               // Color2Pixel(10));
+  return Image(host_camera.resolution, colors,
                Color2Pixel(m_parameter.mc_sample_times));
 }
 
