@@ -102,16 +102,12 @@ struct Triangle {
 struct Camera {
   /** \brief Camera resolution. Unit: pixel */
   uint2 resolution;
-
   /** \brief Camera position. */
   float3 position;
   /** \brief Camera view direction. MUST BE NORMALIZED! */
   float3 view;
   /** \brief Camera up direction, MUST BE NORMALIZED! */
   float3 up;
-  /** \brief Field Of View */
-  float2 fov;
-
   /** \brief Aperture radius. */
   float aperture_radius;
   /** \breief Focal distance/length. */
@@ -119,13 +115,12 @@ struct Camera {
 
   Camera() {}
 
-  Camera(uint2 resolution, float3 position, float3 view, float3 up, float2 fov,
+  Camera(uint2 resolution, float3 position, float3 view, float3 up,
          float aperture_radius, float focal_distance)
       : resolution(resolution),
         position(position),
         view(normalize(view)),
         up(normalize(up)),
-        fov(fov),
         aperture_radius(aperture_radius),
         focal_distance(focal_distance) {}
 };

@@ -6,20 +6,17 @@
 
 #include "path_tracer.hpp"
 
-const float kAperatureRadius = 0.04;
-const uint2 kResolution = make_uint2(512, 512);
-const size_t kNumScenes = 2;
+constexpr float kAperatureRadius = 0.004; // Thin Lens
+constexpr size_t kNumScenes = 2;
 
 const std::string kSceneFiles[kNumScenes]{
     "../scenes/scene-1/scene01.obj", "../scenes/scene-2/scene02.obj",
 };
-const cupt::Camera kCameras[2]{
-    cupt::Camera(kResolution, make_float3(0, 5, 10), make_float3(0, 0, -1),
-                 make_float3(0, 1, 0), make_float2(90, 90), kAperatureRadius,
-                 10),
-    cupt::Camera(kResolution, make_float3(1, 7, 25), make_float3(0, 0, -1),
-                 make_float3(0, 1, 0), make_float2(90, 90), kAperatureRadius,
-                 5),
+const cupt::Camera kCameras[kNumScenes]{
+    cupt::Camera(make_uint2(512, 512), make_float3(0, 5, 15), make_float3(0, 0, -1),
+                 make_float3(0, 1, 0), kAperatureRadius, 2),
+    cupt::Camera(make_uint2(640, 480), make_float3(1, 7, 25), make_float3(0, -1, -25),
+                 make_float3(0, 1, 0), kAperatureRadius, 5),
 };
 
 int main(int argc, const char* argv[]) {

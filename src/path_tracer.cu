@@ -105,21 +105,16 @@ __global__ void RayCastFromCameraKernel(Ray* rays,
   float3 x_axis = normalize(cross(camera.view, camera.up));
   float3 y_axis = normalize(cross(x_axis, camera.view));
 
-  /* compute size and center position of image plane
-   * according to focal distance and fov */
-  float3 center = camera.position + camera.view;
-  float2 half_size = make_float2(tan((camera.fov.x / 2) * kArcPerAngle),
-                                 tan((camera.fov.y / 2) * kArcPerAngle));
+  /* compute image plane ratio and center position */
+  float ratio = camera.resolution.x * 1.0 / camera.resolution.y;
+  float3 center = camera.position + camera.view * camera.focal_distance;
 
   /* compute the jittered point position on image plane */
   float2 jitter = make_float2(curand_uniform(curand_state) - 0.5,
                               curand_uniform(curand_state) - 0.5);
-  float2 distances = make_float2(make_uint2(x, y)) + jitter;
-  distances /= (make_float2(camera.resolution) - 1);
-  distances = (2 * distances - 1) * half_size;
-
-  float3 point = center + x_axis * distances.x + y_axis * distances.y;
-  point = camera.position + (point - camera.position) * camera.focal_distance;
+  float2 distances = (make_float2(make_uint2(x, y)) + jitter) / (make_float2(camera.resolution) - 1);
+  distances = (2 * distances - 1) * make_float2(ratio, 1);
+  float3 point = center + distances.x * x_axis + distances.y * y_axis;
 
   /* compute origin of the ray */
   float3 origin = camera.position;
