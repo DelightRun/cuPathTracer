@@ -2,6 +2,7 @@
 #define TYPES_HPP
 
 #include <thrust/host_vector.h>
+#include <thrust/device_vector.h>
 
 #include <helper_cuda.h>
 #include <helper_math.h>
@@ -116,6 +117,8 @@ struct Camera {
   /** \breief Focal distance/length. */
   float focal_distance;
 
+  Camera() {}
+
   Camera(uint2 resolution, float3 position, float3 view, float3 up, float2 fov,
          float aperture_radius, float focal_distance)
       : resolution(resolution),
@@ -141,15 +144,26 @@ struct Image {
     }
   }
 
+  Image(const uint2 resolution, thrust::device_vector<float3> colors,
+        Color2Pixel color2pixel)
+      : resolution(resolution) {
+    assert(resolution.x * resolution.y == colors.size());
+    thrust::host_vector<float3> hcolors(colors);
+    pixels.resize(colors.size());
+    for (size_t i = 0; i < colors.size(); i++) {
+      pixels[i] = color2pixel(hcolors[i]);
+    }
+  }
+
   bool Save(const char* filename) const;
 };
 
 struct Scene {
   thrust::host_vector<Triangle> triangles;
-  unsigned light;
+  unsigned intensity;
 
-  Scene() : light(10) {}
-  Scene(const char* filename, const char* mtl_basedir = NULL) : light(10) {
+  Scene() : intensity(kDefaultIntensity) {}
+  Scene(const char* filename, const char* mtl_basedir = NULL) : intensity(kDefaultIntensity) {
     if (!Load(filename, mtl_basedir)) {
       throw "Cannot load scene from file!";
     }
