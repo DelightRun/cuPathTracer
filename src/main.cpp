@@ -16,8 +16,8 @@ const std::string kSceneFiles[kNumScenes]{
 const cupt::Camera kCameras[2]{
     cupt::Camera(kResolution, make_float3(0, 5, 10), make_float3(0, 0, -1),
                  make_float3(0, 1, 0), make_float2(90, 90), kAperatureRadius,
-                 5),
-    cupt::Camera(kResolution, make_float3(0, 5, 10), make_float3(0, 0, -1),
+                 10),
+    cupt::Camera(kResolution, make_float3(1, 7, 25), make_float3(0, 0, -1),
                  make_float3(0, 1, 0), make_float2(90, 90), kAperatureRadius,
                  5),
 };
@@ -46,7 +46,6 @@ int main(int argc, const char* argv[]) {
 
   std::cout << "Loading Scene..." << std::flush;
   cupt::Scene scene(filename.c_str(), basedir.c_str());
-  scene.light = 20;
   tracer.SetScene(scene);
   std::cout << "Done" << std::endl;
 
