@@ -12,6 +12,7 @@ constexpr float kArcPerAngle = kPi / 180.0f;
 constexpr float kSQRTOfOneThird = 0.5773502691896257645091487805019574556476;
 
 constexpr float kAirIoR = 1.0f;
+constexpr float kDefaultIntensity = 20;
 
 constexpr float kRayOriginBias = 0.00005;
 constexpr size_t kMaximumSize = (size_t)-1;
