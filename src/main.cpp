@@ -24,13 +24,16 @@ const float kIntensities[2]{20, 5};
 
 int main(int argc, const char* argv[]) {
   if (argc < 3) {
-    std::cout << "Usage: PathTracer SCENE-ID OUTPUT [SAMPLES] [DEPTH]"
+    std::cout << "Usage: PathTracer SCENE-ID OUTPUT [SAMPLES] [DEPTH] [GPU-ID, "
+                 "default: 0]"
               << std::endl;
     return -1;
   }
 
-  std::cout << "Initializing CUDA Runtime..." << std::flush;
-  cudaSetDevice(0);
+  const size_t gpuid = argc > 5 ? atoi(argv[5]) : 0;
+  std::cout << "Initializing CUDA Runtime on GPU " << gpuid << "..."
+            << std::flush;
+  cudaSetDevice(gpuid);
   std::cout << "Done" << std::endl;
 
   cupt::PathTracer::Parameter parameter;
