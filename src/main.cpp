@@ -13,9 +13,9 @@ const std::string kSceneFiles[kNumScenes]{
     "../scenes/scene01/scene01.obj", "../scenes/scene02/scene02.obj",
 };
 const cupt::Camera kCameras[kNumScenes]{
-    cupt::Camera(make_uint2(512, 512), make_float3(0, 5, 15),
+    cupt::Camera(make_uint2(640, 560), make_float3(0, 5, 25),
                  make_float3(0, 0, -1), make_float3(0, 1, 0), kAperatureRadius,
-                 2),
+                 4),
     cupt::Camera(make_uint2(640, 480), make_float3(2, 8, 25),
                  make_float3(0, -1, -4), make_float3(0, 1, 0), kAperatureRadius,
                  4),
