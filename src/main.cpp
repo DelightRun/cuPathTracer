@@ -10,7 +10,7 @@ constexpr float kAperatureRadius = 0.004;  // Thin Lens
 constexpr size_t kNumScenes = 2;
 
 const std::string kSceneFiles[kNumScenes]{
-    "../scenes/scene-1/scene01.obj", "../scenes/scene-2/scene02.obj",
+    "../scenes/scene01/scene01.obj", "../scenes/scene02/scene02.obj",
 };
 const cupt::Camera kCameras[kNumScenes]{
     cupt::Camera(make_uint2(512, 512), make_float3(0, 5, 15),
