@@ -21,8 +21,8 @@ namespace {
 
 __constant__ Camera camera;
 
-__device__ inline float3 ComputePerfectReflectionDirection(
-    const float3 normal, const float3 incident) {
+__device__ inline float3 ComputeReflectionDirection(const float3 normal,
+                                                    const float3 incident) {
   /* Compute reflection direction.
    * Refer to "Rui Wang, Lec12 - Ray Tracing, page 11" */
   return normalize(incident - 2.0 * dot(incident, normal) * normal);
@@ -75,12 +75,11 @@ __device__ inline float3 ComputeTransmissionDirection(
   return normalize(direction);
 }
 
-__device__ float3 ComputeReflectionDirection(const float3 normal,
-                                             const float3 incident,
-                                             const float shininess,
-                                             curandState* curand_state) {
-  float3 perfect = ComputePerfectReflectionDirection(normal, incident);
-  if (iszerof(shininess)) return perfect;
+__device__ float3 ComputeSpecularityDirection(const float3 normal,
+                                              const float3 incident,
+                                              const float shininess,
+                                              curandState* curand_state) {
+  float3 perfect = ComputeReflectionDirection(normal, incident);
   return ComputeRandomCosineWeightedDirection(perfect, incident, shininess,
                                               curand_state);
 }
@@ -173,37 +172,39 @@ __global__ void PathTraceKernel(const Triangle* triangles,
   /** If no intersection, mark as dead ray */
   if (intersection_idx == kInvalidIndex) {
     index = kInvalidIndex;
-  } else {
-    /** Get secondary ray */
+  } else { /** Else get secondary ray */
+    /* Transmit ray to the intersection point */
+    ray.origin += weight.z * ray.direction;
+
     const Triangle triangle = triangles[intersection_idx];
-    const float3 normal = triangle.GetNormal(weight.x, weight.y);
-    const float distance = weight.z;
-
-    float3 diffusion = triangle.material.diffuse_color;
-    float3 reflection = triangle.material.specular_color;
-    float3 refraction = make_float3(0);
-
+    float3 normal = triangle.GetNormal(weight.x, weight.y);
     float shininess = triangle.material.shininess;
     float eta = 1.0;
-    float flag = sign(dot(normal, ray.direction));  // +1 for front, -1 for back
+    bool into = (dot(normal, ray.direction) < 0);
+    if (!into) normal *= -1;
 
-    /* Calcluate Fresnel cofficient if necessary */
+    /* Specular material by default */
+    float3 diffusion = triangle.material.diffuse_color;
+    float3 specularity = triangle.material.specular_color;
+    float3 transmission = make_float3(0);
+
+    /* Transparent material, calculate fresnel cofficient */
     if (triangle.material.dissolve < 1) {
       float incident_ior = kAirIoR, transmitted_ior = kAirIoR;
-      if (flag < 0) /* Air -> Material */
+      if (into) /* Air -> Material */
         transmitted_ior = triangle.material.ior;
-      else /* Material -> Air */
+      else /* Material -> ir */
         incident_ior = triangle.material.ior;
       eta = incident_ior / transmitted_ior;
-      shininess = 0;  // Hack: indicate mirror reflection
+      shininess = 1000;  // Mirror reflection
 
       const float3 direction = ComputeTransmissionDirection(
           normal, ray.direction, eta, curand_state);
 
       if (iszero(direction)) { /* Total Internal Reflection */
-        reflection = make_float3(1);
-        refraction = make_float3(0);
-      } else { /* Fresnel */
+        specularity = make_float3(1);
+        transmission = make_float3(0);
+      } else { /* Calculate Fresnel Cofficient */
         float cos_theta_i = fabs(dot(normal, ray.direction));
         float cos_theta_o = fabs(dot(normal, direction));
         float rs = square(
@@ -214,30 +215,29 @@ __global__ void PathTraceKernel(const Triangle* triangles,
             (incident_ior * cos_theta_o + transmitted_ior * cos_theta_i));
         float r = (rs + rt) / 2;
 
-        reflection = make_float3(r);
-        refraction = make_float3(1 - r);
+        specularity = make_float3(r);
+        transmission = make_float3(1 - r);
       }
     }
 
     /* Russian Roulette */
     float3 threshold[3];
     threshold[0] = diffusion;
-    threshold[1] = threshold[0] + reflection;
-    threshold[2] = threshold[1] + refraction;
+    threshold[1] = threshold[0] + specularity;
+    threshold[2] = threshold[1] + transmission;
     float3 random = threshold[2] * make_float3(curand_uniform(curand_state),
                                                curand_uniform(curand_state),
                                                curand_uniform(curand_state));
 
-    ray.origin += distance * ray.direction;
     if (random <= threshold[0]) { /* Diffusion */
       colors[index] += (ray.color * triangle.material.emitted_color);
       ray.color *= triangle.material.diffuse_color;
-      ray.direction = ComputeDiffusionDirection(normal * -flag, ray.direction,
-                                                curand_state);
-    } else if (random <= threshold[1]) { /* Reflection */
+      ray.direction =
+          ComputeDiffusionDirection(normal, ray.direction, curand_state);
+    } else if (random <= threshold[1]) { /* Specular */
       ray.color *= triangle.material.specular_color;
-      ray.direction = ComputeReflectionDirection(normal, ray.direction,
-                                                 shininess, curand_state);
+      ray.direction = ComputeSpecularityDirection(normal, ray.direction,
+                                                  shininess, curand_state);
     } else if (random <= threshold[2]) { /* Transmission */
       ray.color *= (1 - triangle.material.dissolve);
       ray.direction = ComputeTransmissionDirection(normal, ray.direction, eta,

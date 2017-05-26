@@ -72,7 +72,8 @@ bool Scene::Load(const char* filename, const char* mtl_basedir) {
       triangle.material.ior = material.ior;
       triangle.material.shininess = material.shininess;
 
-      if (triangle.material.ior > 1.0)
+      if (triangle.material.dissolve < 1 &&
+          iszero(triangle.material.specular_color))
         triangle.material.specular_color = make_float3(1);
 
       triangles.push_back(triangle);
