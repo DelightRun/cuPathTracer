@@ -213,10 +213,10 @@ __global__ void PathTraceKernel(const Triangle* triangles,
         float rt = square(
             (incident_ior * cos_theta_o - transmitted_ior * cos_theta_i) /
             (incident_ior * cos_theta_o + transmitted_ior * cos_theta_i));
-        float r = (rs + rt) / 2;
+        float r = (rs + rt);
 
         specularity = make_float3(r);
-        transmission = make_float3(1 - r);
+        transmission = make_float3(2 - r);
       }
     }
 
