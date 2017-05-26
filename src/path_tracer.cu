@@ -80,6 +80,7 @@ __device__ float3 ComputeReflectionDirection(const float3 normal,
                                              const float shininess,
                                              curandState* curand_state) {
   float3 perfect = ComputePerfectReflectionDirection(normal, incident);
+  if (iszerof(shininess)) return perfect;
   return ComputeRandomCosineWeightedDirection(perfect, incident, shininess,
                                               curand_state);
 }
@@ -180,7 +181,7 @@ __global__ void PathTraceKernel(const Triangle* triangles,
 
     float3 diffusion = triangle.material.diffuse_color;
     float3 reflection = triangle.material.specular_color;
-    float3 refraction = make_float3(1 - triangle.material.dissolve);
+    float3 refraction = make_float3(0);
 
     float shininess = triangle.material.shininess;
     float eta = 1.0;
@@ -194,6 +195,7 @@ __global__ void PathTraceKernel(const Triangle* triangles,
       else /* Material -> Air */
         incident_ior = triangle.material.ior;
       eta = incident_ior / transmitted_ior;
+      shininess = 0;  // Hack: indicate mirror reflection
 
       const float3 direction = ComputeTransmissionDirection(
           normal, ray.direction, eta, curand_state);
@@ -236,7 +238,7 @@ __global__ void PathTraceKernel(const Triangle* triangles,
       ray.color *= triangle.material.specular_color;
       ray.direction = ComputeReflectionDirection(normal, ray.direction,
                                                  shininess, curand_state);
-    } else if (random <= threshold[2]) { /* Refraction */
+    } else if (random <= threshold[2]) { /* Transmission */
       ray.color *= (1 - triangle.material.dissolve);
       ray.direction = ComputeTransmissionDirection(normal, ray.direction, eta,
                                                    curand_state);
