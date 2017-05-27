@@ -3,14 +3,20 @@ A Monte Carlo Path Tracer implemented in CUDA.
 
 ## Features
 
+### Current
+
 - [x] Anti-aliasing
 - [x] Depth of Field
 - [x] Diffusion & Specular Reflection
 - [x] Fresnel Equation for Transmission
 - [x] Support `obj` & `mtl` Format
 - [x] Store Result in `ppm` Format
+
+### TODO
+
 - [ ] Bidirection Tracing
-- [ ] Bounding Volume Hierarchy
+- [ ] Accelerating Intersection using BVH
+- [ ] Memory Access AcceCUDA Constant & Texture Memory 
 
 ## System Environment
 
@@ -18,7 +24,7 @@ A Monte Carlo Path Tracer implemented in CUDA.
 + GCC 4.9, **GCC 6 is not allowed!!!**
 + CUDA 8.0, *lower versions are not tested*
 + CMake >= 2.8
-+ NVIDIA GeForce Titan Black & Titan X **Computability >= 3.5 required!!!**
++ NVIDIA GeForce Titan Black (CUDA capability: 3.5) *lower CUDA capabilities are not tested*
 
 ## Project Structure
 
@@ -59,6 +65,7 @@ $ make -j8
 ### Step 3. Execute
 
 The demo program needs 5 command-line parameters - **scene id**, **output filename** **sample time**, **maximum tracing depth** and **gpu id** respectively.
+
 Currently only 2 scenes are supported - `1` for **Cornell Box** and `2` for **Glossy Plane**.
 
 Here is an example:
@@ -69,6 +76,18 @@ $ ./PathTracerDemo 2 scene-2.ppm 1000 10 1 # Create Scene 2 on gpu 1
 ```
 
 ## Results
+
+### Scene 1
+
+![100 spp, 15 sec](results/scene01/100spp.ppm)
+![1000 spp, 140 sec](results/scene01/1000spp.ppm)
+![10000 spp, 23 min](results/scene01/10000spp.ppm)
+
+### Scene 2
+
+![100 spp, 12 sec](results/scene02/100spp.ppm)
+![1000 spp, 125 sec](results/scene02/1000spp.ppm)
+![10000 spp, 21 min](results/scene02/10000spp.ppm)
 
 ## License
 
