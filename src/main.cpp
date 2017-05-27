@@ -6,21 +6,27 @@
 
 #include "path_tracer.hpp"
 
+constexpr size_t kNumScenes = 3;
+
 constexpr float kAperatureRadius = 0.004;  // Thin Lens
-constexpr size_t kNumScenes = 2;
+constexpr float kFocalDistance = 4;
 
 const std::string kSceneFiles[kNumScenes]{
     "../scenes/scene01/scene01.obj", "../scenes/scene02/scene02.obj",
+    "../scenes/scene03/scene03.obj",
 };
 const cupt::Camera kCameras[kNumScenes]{
     cupt::Camera(make_uint2(640, 560), make_float3(0, 5, 25),
                  make_float3(0, 0, -1), make_float3(0, 1, 0), kAperatureRadius,
-                 4),
+                 kFocalDistance),
     cupt::Camera(make_uint2(640, 480), make_float3(2, 8, 25),
                  make_float3(0, -1, -4), make_float3(0, 1, 0), kAperatureRadius,
-                 4),
+                 kFocalDistance),
+    cupt::Camera(make_uint2(640, 560), make_float3(0, 5, 25),
+                 make_float3(0, 0, -1), make_float3(0, 1, 0), kAperatureRadius,
+                 kFocalDistance),
 };
-const float kIntensities[2]{20, 5};
+const float kIntensities[kNumScenes]{20, 5, 20};
 
 int main(int argc, const char* argv[]) {
   if (argc < 3) {
@@ -44,14 +50,14 @@ int main(int argc, const char* argv[]) {
   const size_t id = atoi(argv[1]) - 1;
   assert(id < kNumScenes);
 
-  std::cout << "Loading Scene..." << std::flush;
+  std::cout << "Loading Scene " << id + 1 << "..." << std::flush;
   const std::string& filename = kSceneFiles[id];
   const std::string basedir(filename, 0, filename.rfind("/") + 1);
   cupt::Scene scene(kIntensities[id], filename.c_str(), basedir.c_str());
   tracer.SetScene(scene);
   std::cout << "Done" << std::endl;
 
-  std::cout << "Rendering..." << std::flush;
+  std::cout << "Rendering Scene " << id + 1 << "..." << std::flush;
   const cupt::Camera& camera = kCameras[id];
   cupt::Image image = tracer.Render(camera);
   std::cout << "Done" << ::std::endl;
