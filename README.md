@@ -79,15 +79,15 @@ $ ./PathTracerDemo 2 scene-2.ppm 1000 10 1 # Create Scene 2 on gpu 1
 
 ### Scene 1
 
-![100 spp, 15 sec](results/scene01/100spp.ppm)
-![1000 spp, 140 sec](results/scene01/1000spp.ppm)
-![10000 spp, 23 min](results/scene01/10000spp.ppm)
+![100 spp, 15 sec](results/scene01/100spp.ppm "100 spp, 15 sec")
+![1000 spp, 140 sec](results/scene01/1000spp.ppm "1000 spp, 140 sec")
+![10000 spp, 23 min](results/scene01/10000spp.ppm "10000 spp, 23 min")
 
 ### Scene 2
 
-![100 spp, 12 sec](results/scene02/100spp.ppm)
-![1000 spp, 125 sec](results/scene02/1000spp.ppm)
-![10000 spp, 21 min](results/scene02/10000spp.ppm)
+![100 spp, 12 sec](results/scene02/100spp.ppm "100 spp, 12 sec")
+![1000 spp, 125 sec](results/scene02/1000spp.ppm "1000 spp, 125 sec")
+![10000 spp, 21 min](results/scene02/10000spp.ppm "10000 spp, 21 min")
 
 ## License
 
