@@ -116,7 +116,7 @@ $ ./PathTracerDemo 3 scene-3.ppm 10000 20 2 # Create Scene 3 on gpu 2
 - **Samples per pixel (spp)**: 10000
 - **Maximum tracing bounces**: 20
 
-*Note: This scene has `Depth of Field` effect.*
+_Note: This scene has **Depth of Field** effect._
 
 #### 10000 spp, 45 min
 ![10000 spp, 45 min](results/scene03/10000spp.ppm "10000 spp, 45 min")
