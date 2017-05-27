@@ -67,18 +67,26 @@ $ make -j8
 
 The demo program needs 5 command-line parameters - **scene id**, **output filename** **samples per pixel**, **maximum tracing bounces** and **gpu id** respectively.
 
-Currently only 2 scenes are supported - `1` for **Cornell Box** and `2` for **Glossy Plane**.
+Currently only 3 scenes are supported:
+
+- `1` for scene 1 (Cornell Box)
+- `2` for scene 2 (Glossy Planes)
+- `3` for my own scene (modified Cornell Box)
 
 Here is an example:
 
 ```bash
-$ ./PathTracerDemo 1 scene-1.ppm 2000 20   # Create scene 1 on default gpu (gpu 0)
-$ ./PathTracerDemo 2 scene-2.ppm 1000 10 1 # Create Scene 2 on gpu 1
+$ ./PathTracerDemo 1 scene-1.ppm 2000 10    # Create scene 1 on default gpu (gpu 0)
+$ ./PathTracerDemo 2 scene-2.ppm 1000 10 1  # Create Scene 2 on gpu 1
+$ ./PathTracerDemo 3 scene-3.ppm 10000 20 2 # Create Scene 3 on gpu 2
 ```
 
 ## Results
 
-### Scene 1
+### Scene 1 (Cornell Box)
+
+- **Samples per pixel (spp)**: 100, 1000, 10000
+- **Maximum tracing bounces**: 10
 
 #### 100 spp, 15 sec
 ![100 spp, 15 sec](results/scene01/100spp.ppm "100 spp, 15 sec")
@@ -89,7 +97,10 @@ $ ./PathTracerDemo 2 scene-2.ppm 1000 10 1 # Create Scene 2 on gpu 1
 #### 10000 spp, 23 min
 ![10000 spp, 23 min](results/scene01/10000spp.ppm "10000 spp, 23 min")
 
-### Scene 2
+### Scene 2 (Glossy Planes)
+
+- **Samples per pixel (spp)**: 100, 1000, 10000
+- **Maximum tracing bounces**: 10
 
 #### 100 spp, 12 sec
 ![100 spp, 12 sec](results/scene02/100spp.ppm "100 spp, 12 sec")
@@ -99,6 +110,16 @@ $ ./PathTracerDemo 2 scene-2.ppm 1000 10 1 # Create Scene 2 on gpu 1
 
 #### 10000 spp, 21 min
 ![10000 spp, 21 min](results/scene02/10000spp.ppm "10000 spp, 21 min")
+
+### My Own Scene (modified Cornell Box)
+
+- **Samples per pixel (spp)**: 10000
+- **Maximum tracing bounces**: 20
+
+*Note: This scene has `Depth of Field` effect.*
+
+#### 10000 spp, 45 min
+![10000 spp, 45 min](results/scene03/10000spp.ppm "10000 spp, 45 min")
 
 ## License
 
