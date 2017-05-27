@@ -16,7 +16,7 @@ A Monte Carlo Path Tracer implemented in CUDA.
 
 - [ ] Bidirection Tracing
 - [ ] Accelerating Intersection using BVH
-- [ ] Memory Access AcceCUDA Constant & Texture Memory 
+- [ ] Memory Access Accelerating viaCUDA Constant & Texture Memory 
 
 ## System Environment
 
@@ -64,7 +64,7 @@ $ make -j8
 
 ### Step 3. Execute
 
-The demo program needs 5 command-line parameters - **scene id**, **output filename** **sample time**, **maximum tracing depth** and **gpu id** respectively.
+The demo program needs 5 command-line parameters - **scene id**, **output filename** **samples per pixel**, **maximum tracing bounces** and **gpu id** respectively.
 
 Currently only 2 scenes are supported - `1` for **Cornell Box** and `2` for **Glossy Plane**.
 
