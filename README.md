@@ -16,7 +16,8 @@ A Monte Carlo Path Tracer implemented in CUDA.
 
 - [ ] Bidirection Tracing
 - [ ] Accelerating Intersection using BVH
-- [ ] Memory Access Accelerating viaCUDA Constant & Texture Memory 
+- [ ] Use `float4` instead of `float3`
+- [ ] Memory Access Accelerating via CUDA Constant & Texture Memory 
 
 ## System Environment
 
