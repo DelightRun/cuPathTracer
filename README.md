@@ -84,6 +84,12 @@ $ ./PathTracerDemo 3 scene-3.ppm 10000 20 2 # Create Scene 3 on gpu 2
 
 ## Results
 
+_Note: Execution time information are measured by `time` command, e,g.:_
+
+```bash
+$ time ./PathTracerDemo 1 scene01-10000-ppm 10000 10 0
+``` 
+
 ### Scene 1 (Cornell Box)
 
 - **Samples per pixel (spp)**: 100, 1000, 10000
