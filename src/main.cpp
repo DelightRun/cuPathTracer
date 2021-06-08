@@ -50,19 +50,19 @@ int main(int argc, const char* argv[]) {
   const size_t id = atoi(argv[1]) - 1;
   assert(id < kNumScenes);
 
-  std::cout << "Loading Scene " << id + 1 << "..." << std::flush;
+  std::cout << "Loading Scene " << id + 1 << "...";
   const std::string& filename = kSceneFiles[id];
   const std::string basedir(filename, 0, filename.rfind("/") + 1);
   cupt::Scene scene(kIntensities[id], filename.c_str(), basedir.c_str());
   tracer.SetScene(scene);
   std::cout << "Done" << std::endl;
 
-  std::cout << "Rendering Scene " << id + 1 << "..." << std::flush;
+  std::cout << "Rendering Scene " << id + 1 << "...";
   const cupt::Camera& camera = kCameras[id];
   cupt::Image image = tracer.Render(camera);
   std::cout << "Done" << ::std::endl;
 
-  std::cout << "Saving Result..." << std::flush;
+  std::cout << "Saving Result...";
   bool success = image.Save(argv[2]);
   if (success) {
     std::cout << "Success!" << std::endl;
